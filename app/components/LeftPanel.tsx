@@ -153,7 +153,7 @@ export default function LeftPanel({
           onClick={onNewChat}
           disabled={isRunning}
         >
-          + 새 채팅 (결과 유지, 새 프롬프트)
+          + 새 채팅 (캔버스 이동)
         </button>
         <button 
           className="w-full p-2.5 rounded-[var(--radius)] border font-[var(--font-sans)] text-[12px] font-semibold cursor-pointer transition-all duration-150 flex items-center justify-center gap-1.5 bg-transparent text-[var(--text2)] border-[var(--border2)] hover:bg-[var(--surface2)] hover:text-[var(--text)] mt-1"

@@ -287,10 +287,13 @@ export default function Page() {
 
   const handleNewChat = () => {
     if (isRunning) return;
+    if (prompts.length === 0) {
+      return;
+    }
     setPrompts([]);
     setSelectedId(null);
-    setActiveTab('setup');
-    addLog('info', '새 채팅이 시작되었습니다. 기존 진행 상태는 비워졌습니다.');
+    setActiveTab('canvas');
+    addLog('info', '새 채팅이 시작되었습니다.');
   };
 
   const sendSinglePrompt = async (text: string) => {
