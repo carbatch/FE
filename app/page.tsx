@@ -95,7 +95,7 @@ export default function Page() {
           text: joined,
           folderName: curId, // Fallback folder name
           status: 'pending',
-          image: null
+          images: null
         });
       }
     };
@@ -170,7 +170,7 @@ export default function Page() {
       // but simple variable works for this mock.
       const fullPrompt = stylePrompt ? `${p.text}, ${stylePrompt}` : p.text;
 
-      const result = await generateImagesFromAPI(fullPrompt, p.id, 1);
+      const result = await generateImagesFromAPI(fullPrompt, p.id, 2);
 
       if (abortFlagRef.current) break;
 
@@ -179,14 +179,14 @@ export default function Page() {
         next[idx] = {
           ...next[idx],
           status: result.success ? 'done' : 'error',
-          image: result.success && result.images && result.images.length > 0 ? result.images[0] : next[idx].image,
+          images: result.success && result.images && result.images.length > 0 ? result.images : next[idx].images,
           error: result.error
         };
         return next;
       });
 
       if (result.success) {
-        addLog('success', `이미지 1장 생성 완료`, p.id);
+        addLog('success', `이미지 2장 생성 완료`, p.id);
       } else {
         addLog('error', `생성 실패: ${result.error}`, p.id);
       }
@@ -259,7 +259,7 @@ export default function Page() {
       const zip = new JSZip();
       
       // Get all done prompts with images
-      const donePrompts = prompts.filter(p => p.status === 'done' && p.image);
+      const donePrompts = prompts.filter(p => p.status === 'done' && p.images && p.images.length > 0);
       
       if (donePrompts.length === 0) {
         addLog('warn', '다운로드할 완료된 이미지가 없습니다.');
@@ -268,20 +268,24 @@ export default function Page() {
 
       for (const p of donePrompts) {
         const folderName = p.folderName || p.id;
-        const imgUrlOrBase64 = p.image!;
-        let imgData: Blob | string;
+        if (!p.images) continue;
 
-        if (imgUrlOrBase64.startsWith('data:image/')) {
-          // Extract base64 part
-          imgData = imgUrlOrBase64.split(',')[1];
-          zip.folder(folderName)?.file(`image.png`, imgData, { base64: true });
-        } else {
-          try {
-            const res = await fetch(imgUrlOrBase64);
-            imgData = await res.blob();
-            zip.folder(folderName)?.file(`image.png`, imgData);
-          } catch(e) {
-            addLog('warn', `이미지 다운로드 실패: ${folderName}`);
+        for (let i = 0; i < p.images.length; i++) {
+          const imgUrlOrBase64 = p.images[i];
+          let imgData: Blob | string;
+
+          if (imgUrlOrBase64.startsWith('data:image/')) {
+            // Extract base64 part
+            imgData = imgUrlOrBase64.split(',')[1];
+            zip.folder(folderName)?.file(`image-${i+1}.png`, imgData, { base64: true });
+          } else {
+            try {
+              const res = await fetch(imgUrlOrBase64);
+              imgData = await res.blob();
+              zip.folder(folderName)?.file(`image-${i+1}.png`, imgData);
+            } catch(e) {
+              addLog('warn', `이미지 다운로드 실패: ${folderName} (${i+1})`);
+            }
           }
         }
       }
@@ -334,7 +338,7 @@ export default function Page() {
   const sendSinglePrompt = async (text: string) => {
     const id = String(Date.now()).slice(-3).padStart(3, '0');
     const newPrompt: PromptItem = {
-      id, number: parseInt(id), text, status: 'running', image: null
+      id, number: parseInt(id), text, status: 'running', images: null
     };
     
     setPrompts(prev => [...prev, newPrompt]);
@@ -342,7 +346,7 @@ export default function Page() {
     addLog('info', `단일 프롬프트 생성 시작`, id);
 
     const full = stylePrompt ? `${text}, ${stylePrompt}` : text;
-    const result = await generateImagesFromAPI(full, id, 1);
+    const result = await generateImagesFromAPI(full, id, 2);
 
     setPrompts(prev => {
       const next = [...prev];
@@ -351,7 +355,7 @@ export default function Page() {
         next[idx] = {
           ...next[idx],
           status: result.success ? 'done' : 'error',
-          image: result.success && result.images && result.images.length > 0 ? result.images[0] : next[idx].image,
+          images: result.success && result.images && result.images.length > 0 ? result.images : next[idx].images,
           error: result.error
         };
       }
@@ -359,7 +363,7 @@ export default function Page() {
     });
 
     if (result.success) {
-      addLog('success', '이미지 1장 생성 완료', id);
+      addLog('success', '이미지 2장 생성 완료', id);
     } else {
       addLog('error', result.error!, id);
     }
@@ -367,7 +371,7 @@ export default function Page() {
 
   const retryPrompt = (id: string) => {
     setPrompts(prev => prev.map(p => 
-      p.id === id ? { ...p, status: 'pending', image: null, error: undefined } : p
+      p.id === id ? { ...p, status: 'pending', images: null, error: undefined } : p
     ));
     addLog('info', `재시도 예약됨`, id);
   };

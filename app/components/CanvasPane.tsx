@@ -121,19 +121,17 @@ export default function CanvasPane({
                   </span>
                 </div>
               </div>
-              <div className="flex bg-[var(--border)]">
+              <div className="grid grid-cols-2 gap-[1px] bg-[var(--border)]">
                 {(() => {
-                  const img = p.image;
+                  const imgs = p.images || [];
                   const isRunning = p.status === 'running';
                   const isError = p.status === 'error';
                   
-                  return (
-                    <div className={`w-full aspect-[16/9] flex items-center justify-center relative overflow-hidden bg-[var(--surface2)]
-                      ${!img && isRunning ? 'animate-[shimmer_1.5s_ease-in-out_infinite] bg-[length:200%_100%] bg-gradient-to-r from-[var(--surface2)] via-[var(--border2)] to-[var(--surface2)]' : ''}
-                    `}>
-                      {img ? (
-                        <img src={img} alt={`${p.id}`} className="w-full h-full object-cover" />
-                      ) : (
+                  if (imgs.length === 0) {
+                    return (
+                      <div className={`col-span-2 w-full aspect-[32/9] flex items-center justify-center relative overflow-hidden bg-[var(--surface2)]
+                        ${isRunning ? 'animate-[shimmer_1.5s_ease-in-out_infinite] bg-[length:200%_100%] bg-gradient-to-r from-[var(--surface2)] via-[var(--border2)] to-[var(--surface2)]' : ''}
+                      `}>
                         <div className={`flex flex-col items-center gap-2 text-[11px] font-[var(--font-mono)]
                           ${isRunning ? 'text-[var(--accent)]' : isError ? 'text-[var(--red)]' : 'text-[var(--text3)]'}
                         `}>
@@ -142,9 +140,15 @@ export default function CanvasPane({
                           </div>
                           <div>{isRunning ? '생성 중...' : isError ? (p.error || '오류') : '대기중'}</div>
                         </div>
-                      )}
+                      </div>
+                    );
+                  }
+
+                  return imgs.map((img, idx) => (
+                    <div key={idx} className="w-full aspect-square flex items-center justify-center relative overflow-hidden bg-[var(--surface2)]">
+                      <img src={img} alt={`${p.id}-${idx+1}`} className="w-full h-full object-cover" />
                     </div>
-                  );
+                  ));
                 })()}
               </div>
               <div className="p-2 px-3 flex gap-1.5">
@@ -163,10 +167,12 @@ export default function CanvasPane({
                 >
                   복사
                 </button>
-                {p.image && p.status === 'done' && (
+                {p.images && p.images.length > 0 && p.status === 'done' && (
                   <button 
                     onClick={() => {
-                      saveAs(p.image!, `${p.folderName || p.id}-image.png`);
+                      p.images!.forEach((img, idx) => {
+                        saveAs(img, `${p.folderName || p.id}-image-${idx+1}.png`);
+                      });
                     }}
                     className="flex-[2] py-1.5 rounded-[7px] border border-[var(--border2)] bg-transparent text-[var(--text2)] text-[11px] font-[var(--font-sans)] cursor-pointer transition-colors duration-100 hover:bg-[#22c55e14] hover:border-[var(--green)] hover:text-[var(--green)]"
                   >

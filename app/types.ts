@@ -6,7 +6,7 @@ export interface PromptItem {
   text: string;
   folderName?: string;
   status: PromptStatus;
-  image: string | null;
+  images: string[] | null;
   error?: string;
 }
 
