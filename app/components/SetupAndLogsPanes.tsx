@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 
 interface SetupPaneProps {
-  onParsePrompts: (text: string) => boolean;
+  onParsePrompts: (text: string) => Promise<boolean>;
 }
 
 export function SetupPane({ onParsePrompts }: SetupPaneProps) {
@@ -10,12 +10,12 @@ export function SetupPane({ onParsePrompts }: SetupPaneProps) {
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleParse = () => {
+  const handleParse = async () => {
     if (!text.trim()) {
       setError('텍스트를 입력해주세요');
       return;
     }
-    const success = onParsePrompts(text);
+    const success = await onParsePrompts(text);
     if (!success) {
       setError('프롬프트를 파싱할 수 없습니다. 형식을 확인해주세요.');
     } else {

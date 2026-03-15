@@ -1,4 +1,4 @@
-import React from 'react';
+import { ScrollText, Settings } from 'lucide-react';
 
 interface TopBarProps {
   activeTab: 'canvas' | 'setup' | 'logs';
@@ -10,19 +10,13 @@ interface TopBarProps {
 
 export default function TopBar({ activeTab, setActiveTab, promptsCount, doneCount, isRunning }: TopBarProps) {
   const pct = promptsCount > 0 ? Math.round((doneCount / promptsCount) * 100) : 0;
-  
+
   return (
     <div className="flex items-center justify-between px-5 h-[52px] bg-[var(--surface)] border-b border-[var(--border)] shrink-0 gap-3">
       <div className="flex items-center gap-2.5">
         <div className="font-[var(--font-serif)] text-[18px] text-[var(--accent)] tracking-[-0.3px]">
           Batch<span className="text-[var(--text2)] text-[13px] font-[var(--font-sans)] font-light">&nbsp;Image Studio</span>
         </div>
-      </div>
-      
-      <div className="flex items-center gap-1.5 flex-1 justify-center max-w-[480px] mx-auto">
-        <TabButton label="캔버스" active={activeTab === 'canvas'} onClick={() => setActiveTab('canvas')} />
-        <TabButton label="설정" active={activeTab === 'setup'} onClick={() => setActiveTab('setup')} />
-        <TabButton label="로그" active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} />
       </div>
 
       <div className="flex items-center gap-2">
@@ -35,20 +29,29 @@ export default function TopBar({ activeTab, setActiveTab, promptsCount, doneCoun
             <span>{doneCount} / {promptsCount}</span>
           </div>
         )}
+
+        <button
+          onClick={() => setActiveTab(activeTab === 'logs' ? 'canvas' : 'logs')}
+          title="로그"
+          className={`w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-all duration-150 border
+            ${activeTab === 'logs'
+              ? 'bg-[var(--surface2)] border-[var(--border2)] text-[var(--text)]'
+              : 'border-transparent text-[var(--text3)] hover:text-[var(--text)] hover:bg-white/5'}`}
+        >
+          <ScrollText size={15} />
+        </button>
+
+        <button
+          onClick={() => setActiveTab(activeTab === 'setup' ? 'canvas' : 'setup')}
+          title="설정 / 프롬프트 로드"
+          className={`w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-all duration-150 border
+            ${activeTab === 'setup'
+              ? 'bg-[var(--surface2)] border-[var(--border2)] text-[var(--text)]'
+              : 'border-transparent text-[var(--text3)] hover:text-[var(--text)] hover:bg-white/5'}`}
+        >
+          <Settings size={15} />
+        </button>
       </div>
     </div>
-  );
-}
-
-function TabButton({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`flex items-center gap-1.25 px-3 py-1.25 rounded-[7px] border text-[12px] font-[var(--font-sans)] cursor-pointer transition-all duration-150 whitespace-nowrap
-        ${active ? 'bg-[var(--surface2)] border-[var(--border2)] text-[var(--text)]' : 'border-transparent bg-transparent text-[var(--text2)] hover:text-[var(--text)] hover:bg-white/5'}`}
-    >
-      <span className={`w-[6px] h-[6px] rounded-full ${active ? 'bg-[var(--accent)]' : 'bg-[var(--text3)]'}`} />
-      {label}
-    </button>
   );
 }
