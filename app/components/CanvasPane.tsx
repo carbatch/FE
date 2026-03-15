@@ -1,21 +1,39 @@
 import { useRef } from 'react';
 import type { PromptItem } from '../types';
-import { saveAs } from 'file-saver';
 import { Play, Sparkles, Dices, Plus, Copy, Download, RotateCcw, PackageOpen } from 'lucide-react';
+
+async function downloadImage(url: string, filename: string) {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function copyImageToClipboard(url: string) {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': blob }),
+  ]);
+}
 
 interface CanvasPaneProps {
   prompts: PromptItem[];
-  currentPromptIndex: number;
   isRunning: boolean;
   currentPageId: number | null;
   onSendSinglePrompt: (text: string) => void;
-  onRetryPrompt: (id: string) => void;
+  onRetryImage: (promptId: string, imgIndex: number) => void;
+  retryingImages: Set<string>;
   onParsePrompts: (text: string) => Promise<boolean>;
   onDownloadAllZip: () => void;
 }
 
 export default function CanvasPane({
-  prompts, onSendSinglePrompt, onRetryPrompt, onParsePrompts, onDownloadAllZip
+  prompts, onSendSinglePrompt, onRetryImage, retryingImages, onParsePrompts, onDownloadAllZip
 }: CanvasPaneProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,12 +97,12 @@ export default function CanvasPane({
               <div
                 key={p.id}
                 id={`card-${p.id}`}
-                className="flex rounded-[14px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] transition-all duration-200 hover:border-[var(--border2)]"
+                className="flex rounded-[14px] overflow-hidden border border-[var(--border)] bg-[var(--surface)] transition-all duration-200 hover:border-[var(--border2)] min-h-100"
               >
                 {/* 이미지 영역 */}
                 <div className="flex-1 grid grid-cols-2 gap-[1px] bg-[var(--border)]">
                   {imgs.length === 0 ? (
-                    <div className={`col-span-2 aspect-[4/1] flex items-center justify-center bg-[var(--surface2)]
+                    <div className={`col-span-2 flex items-center justify-center bg-[var(--surface2)] min-h-100
                       ${isCardRunning ? 'bg-gradient-to-r from-[var(--surface2)] via-[var(--border2)] to-[var(--surface2)] animate-[shimmer_1.5s_ease-in-out_infinite] bg-[length:200%_100%]' : ''}`}>
                       <div className={`flex flex-col items-center gap-2 text-[11px] font-[var(--font-mono)]
                         ${isCardRunning ? 'text-[var(--accent)]' : isError ? 'text-[var(--red)]' : 'text-[var(--text3)]'}`}>
@@ -95,45 +113,50 @@ export default function CanvasPane({
                       </div>
                     </div>
                   ) : (
-                    imgs.map((img, idx) => (
-                      <div key={idx} className="aspect-video bg-[var(--surface2)] overflow-hidden">
-                        <img src={img} alt={`${p.id}-${idx + 1}`} className="w-full h-full object-cover" />
-                      </div>
-                    ))
+                    imgs.map((img, idx) => {
+                      const retryKey = `${p.id}__${idx}`;
+                      const isRetrying = retryingImages.has(retryKey);
+                      return (
+                        <div key={idx} className="relative group aspect-video bg-[var(--surface2)] overflow-hidden">
+                          <img src={img} alt={`${p.id}-${idx + 1}`} className="w-full h-full object-cover" />
+
+                          {/* 재시도 중 로딩 오버레이 */}
+                          {isRetrying && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                              <span className="text-white text-[28px] animate-[spin_1s_linear_infinite]">⟳</span>
+                            </div>
+                          )}
+
+                          {/* 호버 오버레이 (재시도 중엔 숨김) */}
+                          {!isRetrying && (
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center justify-center gap-3">
+                              <button
+                                onClick={() => copyImageToClipboard(img).catch(() => {})}
+                                title="이미지 복사"
+                                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center text-white transition-all duration-150 cursor-pointer"
+                              >
+                                <Copy size={15} />
+                              </button>
+                              <button
+                                onClick={() => downloadImage(img, `${p.id}-${idx + 1}.png`)}
+                                title="이미지 다운로드"
+                                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center text-white transition-all duration-150 cursor-pointer"
+                              >
+                                <Download size={15} />
+                              </button>
+                              <button
+                                onClick={() => onRetryImage(p.id, idx)}
+                                title="이 이미지만 재시도"
+                                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center text-white transition-all duration-150 cursor-pointer"
+                              >
+                                <RotateCcw size={15} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
-                </div>
-
-                {/* 액션 버튼 (우측 세로) */}
-                <div className="w-14 shrink-0 bg-[var(--surface)] border-l border-[var(--border)] flex flex-col items-center justify-center gap-3 py-4">
-                  <button
-                    onClick={() => navigator.clipboard.writeText(p.text)}
-                    title="프롬프트 복사"
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text3)] hover:text-[var(--text)] hover:bg-[var(--surface2)] transition-all duration-150 cursor-pointer"
-                  >
-                    <Copy size={14} />
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (p.images && p.images.length > 0) {
-                        p.images.forEach((img, idx) => saveAs(img, `${p.folderName || p.id}-image-${idx + 1}.png`));
-                      }
-                    }}
-                    disabled={!p.images || p.images.length === 0}
-                    title="이미지 다운로드"
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text3)] hover:text-[var(--green)] hover:bg-[#22c55e14] transition-all duration-150 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Download size={14} />
-                  </button>
-
-                  <button
-                    onClick={() => onRetryPrompt(p.id)}
-                    disabled={isCardRunning}
-                    title="재시도"
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text3)] hover:text-[var(--accent)] hover:bg-[#f5c51814] transition-all duration-150 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <RotateCcw size={14} />
-                  </button>
                 </div>
               </div>
             );

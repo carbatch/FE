@@ -2,9 +2,10 @@ import React, { useState, useRef } from 'react';
 
 interface SetupPaneProps {
   onParsePrompts: (text: string) => Promise<boolean>;
+  onCancel: () => void;
 }
 
-export function SetupPane({ onParsePrompts }: SetupPaneProps) {
+export function SetupPane({ onParsePrompts, onCancel }: SetupPaneProps) {
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
@@ -133,7 +134,13 @@ export function SetupPane({ onParsePrompts }: SetupPaneProps) {
 
         {/* Actions */}
         <div className="pb-5 px-6 pt-2 flex gap-2">
-          <button 
+          <button
+            className="py-2 px-3 rounded-[10px] font-[var(--font-sans)] text-[12px] font-semibold border border-[var(--border2)] bg-transparent text-[var(--text2)] hover:bg-[var(--surface2)] hover:text-[var(--text)] transition-colors duration-150 cursor-pointer"
+            onClick={onCancel}
+          >
+            취소
+          </button>
+          <button
             className="flex-1 py-2 rounded-[10px] font-[var(--font-sans)] text-[12px] font-semibold border border-[var(--border2)] bg-transparent text-[var(--text2)] hover:bg-[var(--surface2)] hover:text-[var(--text)] transition-colors duration-150 cursor-pointer"
             onClick={loadExample}
           >
