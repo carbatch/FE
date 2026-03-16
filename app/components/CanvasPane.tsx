@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { PromptItem } from '../types';
 import { Play, Sparkles, Dices, Plus, Copy, Download, RotateCcw, PackageOpen } from 'lucide-react';
 
@@ -14,20 +14,36 @@ async function downloadImage(url: string, filename: string) {
 }
 
 async function copyImageToClipboard(url: string) {
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = reject;
-    img.src = url;
-  });
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  canvas.getContext('2d')!.drawImage(img, 0, 0);
-  const pngBlob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png')
-  );
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+  const res = await fetch(url);
+  const blob = await res.blob();
+  const pngBlob = blob.type === 'image/png'
+    ? blob
+    : await new Promise<Blob>((resolve, reject) => {
+        const objUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(objUrl);
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext('2d')!.drawImage(img, 0, 0);
+          canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
+        };
+        img.onerror = reject;
+        img.src = objUrl;
+      });
+
+  // HTTPS / localhost: 클립보드 직접 복사
+  if (window.isSecureContext && navigator.clipboard?.write) {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+    return;
+  }
+
+  // HTTP fallback: 새 탭에서 이미지 열기
+  const objUrl = URL.createObjectURL(pngBlob);
+  const tab = window.open(objUrl, '_blank');
+  setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+  if (!tab) throw new Error('팝업이 차단되었습니다');
 }
 
 interface CanvasPaneProps {
@@ -46,6 +62,19 @@ export default function CanvasPane({
 }: CanvasPaneProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (img: string, key: string) => {
+    const isHttp = !window.isSecureContext;
+    copyImageToClipboard(img)
+      .then(() => {
+        if (!isHttp) {
+          setCopiedKey(key);
+          setTimeout(() => setCopiedKey(k => k === key ? null : k), 1500);
+        }
+      })
+      .catch(() => {});
+  };
 
   const handleSend = () => {
     const text = inputRef.current?.value.trim();
@@ -140,9 +169,12 @@ export default function CanvasPane({
                           {!isRetrying && (
                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center justify-center gap-3">
                               <button
-                                onClick={() => copyImageToClipboard(img).catch(() => {})}
-                                title="이미지 복사"
-                                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 flex items-center justify-center text-white transition-all duration-150 cursor-pointer"
+                                onClick={() => handleCopy(img, retryKey)}
+                                title={copiedKey === retryKey ? '복사됨!' : '이미지 복사'}
+                                className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all duration-150 cursor-pointer
+                                  ${copiedKey === retryKey
+                                    ? 'bg-[var(--green)]/20 border-[var(--green)]/40 text-[var(--green)]'
+                                    : 'bg-white/10 hover:bg-white/25 border-white/20 text-white'}`}
                               >
                                 <Copy size={15} />
                               </button>
@@ -186,7 +218,7 @@ export default function CanvasPane({
         </button>
 
         {/* 텍스트 입력 */}
-        <div className="flex-1 bg-[var(--surface2)] border border-[var(--border2)] rounded-[12px] px-3.5 py-2.5 flex items-end gap-2.5 focus-within:border-[var(--accent)] transition-colors duration-150">
+        <div className="flex-1 bg-[var(--surface2)] border border-[var(--border2)] rounded-[12px] px-3.5 flex items-center gap-2.5 min-h-10 focus-within:border-[var(--accent)] transition-colors duration-150">
           <textarea
             ref={inputRef}
             className="flex-1 bg-transparent border-none outline-none text-[var(--text)] text-[13px] font-[var(--font-sans)] resize-none leading-[1.5] max-h-[120px] placeholder:text-[var(--text3)]"
