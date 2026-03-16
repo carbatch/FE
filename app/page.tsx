@@ -12,7 +12,7 @@ import LeftPanel from './components/LeftPanel';
 import CanvasPane from './components/CanvasPane';
 import { SetupPane, LogsPane } from './components/SetupAndLogsPanes';
 
-const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 function authHeaders(token: string | null): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };

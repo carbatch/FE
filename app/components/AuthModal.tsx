@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useSetAtom } from 'jotai';
 import { authAtom } from '../store/atoms';
 
-const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export default function AuthModal() {
   const setAuth = useSetAtom(authAtom);
