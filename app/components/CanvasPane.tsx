@@ -14,11 +14,20 @@ async function downloadImage(url: string, filename: string) {
 }
 
 async function copyImageToClipboard(url: string) {
-  const res = await fetch(url);
-  const blob = await res.blob();
-  await navigator.clipboard.write([
-    new ClipboardItem({ 'image/png': blob }),
-  ]);
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = reject;
+    img.src = url;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext('2d')!.drawImage(img, 0, 0);
+  const pngBlob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png')
+  );
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
 }
 
 interface CanvasPaneProps {

@@ -1,15 +1,24 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useAtom } from 'jotai';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import type { PromptItem, PageSummary, LogEntry } from './types';
+import { authAtom } from './store/atoms';
+import AuthModal from './components/AuthModal';
 import TopBar from './components/TopBar';
 import LeftPanel from './components/LeftPanel';
 import CanvasPane from './components/CanvasPane';
 import { SetupPane, LogsPane } from './components/SetupAndLogsPanes';
 
 const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+function authHeaders(token: string | null): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  return h;
+}
 
 // ── API 호출 ──────────────────────────────────────────────────────────────
 
@@ -38,11 +47,12 @@ async function apiGenerateImages(
   count = 2,
   pageId?: number,
   isAborted: () => boolean = () => false,
+  token: string | null = null,
 ) {
   try {
     const res = await fetch(`${getApiUrl()}/api/v1/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(token),
       body: JSON.stringify({ prompt, id: promptId, count, page_id: pageId }),
     });
     if (!res.ok) return { success: false, images: [], error: `API Error: ${res.status}` };
@@ -58,26 +68,30 @@ async function apiGenerateImages(
   return { success: true, images: data.image_paths.map((p: string) => `${base}/storage/${p}`) };
 }
 
-async function apiCreatePage(title = '새 채팅'): Promise<PageSummary> {
+async function apiCreatePage(title = '새 채팅', token: string | null = null): Promise<PageSummary> {
   const res = await fetch(`${getApiUrl()}/api/v1/pages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(token),
     body: JSON.stringify({ title }),
   });
   return res.json();
 }
 
-async function apiListPages(): Promise<PageSummary[]> {
+async function apiListPages(token: string | null = null): Promise<PageSummary[]> {
   try {
-    const res = await fetch(`${getApiUrl()}/api/v1/pages`);
+    const res = await fetch(`${getApiUrl()}/api/v1/pages`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!res.ok) return [];
     return res.json();
   } catch { return []; }
 }
 
-async function apiGetPageGenerations(pageId: number): Promise<PromptItem[]> {
+async function apiGetPageGenerations(pageId: number, token: string | null = null): Promise<PromptItem[]> {
   try {
-    const res = await fetch(`${getApiUrl()}/api/v1/pages/${pageId}/generations`);
+    const res = await fetch(`${getApiUrl()}/api/v1/pages/${pageId}/generations`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!res.ok) return [];
     const gens = await res.json();
     const base = getApiUrl();
@@ -99,21 +113,41 @@ async function apiGetPageGenerations(pageId: number): Promise<PromptItem[]> {
   } catch { return []; }
 }
 
-async function apiRenamePage(pageId: number, title: string) {
+async function apiRenamePage(pageId: number, title: string, token: string | null = null) {
   await fetch(`${getApiUrl()}/api/v1/pages/${pageId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(token),
     body: JSON.stringify({ title }),
   });
 }
 
-async function apiDeletePage(pageId: number) {
-  await fetch(`${getApiUrl()}/api/v1/pages/${pageId}`, { method: 'DELETE' });
+async function apiDeletePage(pageId: number, token: string | null = null) {
+  await fetch(`${getApiUrl()}/api/v1/pages/${pageId}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
 }
 
 // ── 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function Page() {
+  const [auth, setAuth] = useAtom(authAtom);
+
+  // 마운트 시 저장된 토큰 유효성 검증
+  useEffect(() => {
+    if (!auth.token) return;
+    fetch(`${getApiUrl()}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+    }).then(res => {
+      if (!res.ok) setAuth({ token: null, user: null });
+    }).catch(() => { /* 네트워크 오류는 무시 */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // stale closure 방지용 tokenRef
+  const tokenRef = useRef(auth.token);
+  useEffect(() => { tokenRef.current = auth.token; }, [auth.token]);
+
   const [activeTab, setActiveTab] = useState<'canvas' | 'setup' | 'logs'>('canvas');
 
   const [pages, setPages] = useState<PageSummary[]>([]);
@@ -170,7 +204,8 @@ export default function Page() {
   // ── 초기 로드 ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    apiListPages().then(list => {
+    if (!auth.token) return;
+    apiListPages(auth.token).then(list => {
       setPages(list);
       if (list.length > 0) {
         const lastId = typeof window !== 'undefined' ? localStorage.getItem('lastPageId') : null;
@@ -179,7 +214,7 @@ export default function Page() {
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [auth.token]);
 
   // ── 페이지 선택 ───────────────────────────────────────────────────────
 
@@ -188,7 +223,7 @@ export default function Page() {
     if (typeof window !== 'undefined') localStorage.setItem('lastPageId', String(pageId));
     setActiveTab('canvas');
     setPrompts([]);
-    const items = await apiGetPageGenerations(pageId);
+    const items = await apiGetPageGenerations(pageId, tokenRef.current);
     setPrompts(items);
     resumePolling(items);
   };
@@ -202,7 +237,7 @@ export default function Page() {
 
   const handleNewPage = async () => {
     if (isRunning) return;
-    const page = await apiCreatePage();
+    const page = await apiCreatePage('새 채팅', auth.token);
     setPages(prev => [page, ...prev]);
     setCurrentPageId(page.id);
     if (typeof window !== 'undefined') localStorage.setItem('lastPageId', String(page.id));
@@ -214,7 +249,7 @@ export default function Page() {
   // ── 페이지 삭제 ───────────────────────────────────────────────────────
 
   const handleDeletePage = async (pageId: number) => {
-    await apiDeletePage(pageId);
+    await apiDeletePage(pageId, auth.token);
     setPages(prev => prev.filter(p => p.id !== pageId));
     if (currentPageId === pageId) {
       const remaining = pages.filter(p => p.id !== pageId);
@@ -233,7 +268,7 @@ export default function Page() {
   const sendSinglePrompt = async (text: string) => {
     let pageId = currentPageId;
     if (!pageId) {
-      const page = await apiCreatePage(text.slice(0, 30));
+      const page = await apiCreatePage(text.slice(0, 30), auth.token);
       setPages(prev => [page, ...prev]);
       setCurrentPageId(page.id);
       if (typeof window !== 'undefined') localStorage.setItem('lastPageId', String(page.id));
@@ -246,14 +281,14 @@ export default function Page() {
 
     if (prompts.length === 0) {
       const title = text.slice(0, 30);
-      apiRenamePage(pageId, title);
+      apiRenamePage(pageId, title, auth.token);
       setPages(prev => prev.map(p => p.id === pageId ? { ...p, title } : p));
     }
 
     addLog('info', `이미지 생성 시작`);
 
     const full = stylePromptRef.current ? `${text}, ${stylePromptRef.current}` : text;
-    const result = await apiGenerateImages(full, promptId, 2, pageId);
+    const result = await apiGenerateImages(full, promptId, 2, pageId, () => false, auth.token);
 
     setPrompts(prev => prev.map(p =>
       p.id === promptId
@@ -285,7 +320,7 @@ export default function Page() {
       // 매 항목마다 최신 스타일을 ref에서 읽음 (중간에 변경돼도 즉시 반영)
       const style = stylePromptRef.current;
       const full = style ? `${p.text}, ${style}` : p.text;
-      const result = await apiGenerateImages(full, p.id, 2, pageId, () => abortFlagRef.current);
+      const result = await apiGenerateImages(full, p.id, 2, pageId, () => abortFlagRef.current, tokenRef.current);
 
       setPrompts(prev => prev.map(x =>
         x.id === p.id
@@ -303,7 +338,9 @@ export default function Page() {
       addLog('success', '모든 프롬프트 처리 완료! ✦');
       if (isAutoDownload) {
         try {
-          const res = await fetch(`${getApiUrl()}/api/v1/pages/${pageId}/download-zip`);
+          const res = await fetch(`${getApiUrl()}/api/v1/pages/${pageId}/download-zip`, {
+          headers: tokenRef.current ? { Authorization: `Bearer ${tokenRef.current}` } : {},
+        });
           if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
           const blob = await res.blob();
           const { saveAs } = await import('file-saver');
@@ -352,7 +389,7 @@ export default function Page() {
     const retryId = `${Date.now()}`;
     const style = stylePromptRef.current;
     const full = style ? `${prompt.text}, ${style}` : prompt.text;
-    const result = await apiGenerateImages(full, retryId, 1, currentPageId);
+    const result = await apiGenerateImages(full, retryId, 1, currentPageId, () => false, auth.token);
 
     setRetryingImages(prev => {
       const next = new Set(prev);
@@ -400,7 +437,7 @@ export default function Page() {
 
     let pageId = currentPageId;
     if (!pageId) {
-      const page = await apiCreatePage(results[0].text.slice(0, 30));
+      const page = await apiCreatePage(results[0].text.slice(0, 30), tokenRef.current);
       setPages(prev => [page, ...prev]);
       setCurrentPageId(page.id);
       if (typeof window !== 'undefined') localStorage.setItem('lastPageId', String(page.id));
@@ -433,7 +470,7 @@ export default function Page() {
       try {
         const res = await fetch(`${getApiUrl()}/api/v1/extract-style`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(tokenRef.current),
           body: JSON.stringify({ image: base64Data }),
         });
         if (!res.ok) throw new Error();
@@ -456,7 +493,9 @@ export default function Page() {
     const done = prompts.filter(p => p.status === 'done' && p.images?.length);
     if (!done.length) { addLog('warn', '다운로드할 이미지가 없습니다.'); return; }
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/pages/${currentPageId}/download-zip`);
+      const res = await fetch(`${getApiUrl()}/api/v1/pages/${currentPageId}/download-zip`, {
+        headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+      });
       if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
       const blob = await res.blob();
       saveAs(blob, `carbatch-page-${currentPageId}.zip`);
@@ -470,14 +509,25 @@ export default function Page() {
 
   const doneCount = prompts.filter(p => p.status === 'done').length;
 
+  const handleLogout = () => {
+    setAuth({ token: null, user: null });
+    setPages([]);
+    setPrompts([]);
+    setCurrentPageId(null);
+    if (typeof window !== 'undefined') localStorage.removeItem('lastPageId');
+  };
+
   return (
     <div className="flex flex-col h-screen bg-[var(--bg)] text-[var(--text)] overflow-hidden font-[var(--font-sans)]">
+      {!auth.token && <AuthModal />}
       <TopBar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         promptsCount={prompts.length}
         doneCount={doneCount}
         isRunning={isRunning}
+        username={auth.user?.username ?? null}
+        onLogout={handleLogout}
       />
       <div className="flex flex-1 overflow-hidden">
         <LeftPanel
